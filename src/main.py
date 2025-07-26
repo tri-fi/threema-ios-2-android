@@ -6,7 +6,8 @@ import sys
 from util import *
 
 threema_db_file = sys.argv[1]
-output_dir = sys.argv[2] if len(sys.argv) == 3 else './output'
+threema_id = sys.argv[2]
+output_dir = sys.argv[3] if len(sys.argv) == 4 else './output'
 
 # create output directory, if not already created
 if not os.path.isdir(output_dir):
@@ -50,7 +51,7 @@ group_csv_columns = ['id', 'creator', 'groupname', 'created_at', 'members', 'del
 group_query = """
     SELECT
         lower(hex(conv.ZGROUPID)) AS id,
-        contact.ZIDENTITY AS creator,
+        IFNULL(contact.ZIDENTITY, '{threema_id}') AS creator,
         conv.ZGROUPNAME AS groupname,
         '0' AS created_at,
         conv.ZGROUPMYIDENTITY || ';' || group_concat(group_member_contact.ZIDENTITY, ';') AS members,
@@ -58,11 +59,11 @@ group_query = """
         '0' AS archived
     FROM ZCONVERSATION AS conv
     LEFT JOIN ZCONTACT AS contact ON (conv.ZCONTACT = contact.Z_PK)
-    LEFT JOIN Z_5GROUPCONVERSATIONS group_member ON (group_member.Z_6GROUPCONVERSATIONS = conv.Z_PK)
-    LEFT JOIN ZCONTACT group_member_contact ON (group_member_contact.Z_PK = group_member.Z_5MEMBERS)
+    LEFT JOIN Z_6GROUPCONVERSATIONS group_member ON (group_member.Z_7GROUPCONVERSATIONS = conv.Z_PK)
+    LEFT JOIN ZCONTACT group_member_contact ON (group_member_contact.Z_PK = group_member.Z_6MEMBERS)
     WHERE conv.ZGROUPID IS NOT NULL
     GROUP BY id
-"""
+""".format(threema_id = threema_id)
 
 #
 # Export Contact List
@@ -131,7 +132,8 @@ for contact in get_all_contact_ids(threema_db_conn):
 
         if (row[columns.index('body')]) is None:
             # TODO handle different message types than text
-            continue
+            row[columns.index('body')] = 'ZZZ_'+ row[columns.index('apiid')] + '_ZZZ'
+            #continue
 
         writer.writerow(row)
 
@@ -140,12 +142,12 @@ for contact in get_all_contact_ids(threema_db_conn):
 # Export Group Chat
 #
 for group in get_all_group_ids(threema_db_conn):
-    columns = ['apiid', 'uid', 'isoutbox', 'isread', 'issaved', 'messagestae', 'posted_at', 'created_at', 'modified_at',
+    columns = ['apiid', 'uid', "identity", 'isoutbox', 'isread', 'issaved', 'messagestae', 'posted_at', 'created_at', 'modified_at',
                'type', 'body', 'isstatusmessage', 'isqueued', 'caption', 'quoted_message_apiid']
 
     print('Exporting group chat for: ', group)
 
-    group_creator = get_group_creator(threema_db_conn, group)
+    group_creator = get_group_creator(threema_db_conn, group, threema_id)
     file_name = 'group_message_' + group + '_' + group_creator + '.csv'
 
     f = open(output_dir + '/' + file_name, 'w+', encoding='utf-8')
@@ -184,7 +186,8 @@ for group in get_all_group_ids(threema_db_conn):
 
         if (row[columns.index('body')]) is None:
             # TODO handle different message types than text
-            continue
+            row[columns.index('body')] = 'ZZZ_'+ row[columns.index('apiid')] + '_ZZZ'
+            #continue
 
         writer.writerow(row)
 
