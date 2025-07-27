@@ -2,6 +2,7 @@ import csv
 import os.path
 import sqlite3
 import sys
+import uuid
 
 from util import *
 
@@ -90,7 +91,8 @@ f.close()
 #
 for contact in get_all_contact_ids(threema_db_conn):
     columns = ['apiid', 'uid', 'isoutbox', 'isread', 'issaved', 'messagestae', 'posted_at', 'created_at', 'modified_at',
-               'type', 'body', 'isstatusmessage', 'isqueued', 'caption', 'quoted_message_apiid']
+               'type', 'body', 'isstatusmessage', 'caption', 'quoted_message_apiid',
+               'delivered_at', 'read_at', 'g_msg_states', 'display_tags', 'edited_at', 'deleted_at']
 
     print('Exporting private chat for: ', contact)
 
@@ -108,14 +110,19 @@ for contact in get_all_contact_ids(threema_db_conn):
             1 AS issaved,
             '' AS messagestae,
             cast((msg.ZDATE + 978307200) * 1000 as int) AS posted_at,
-            cast((msg.ZDELIVERYDATE + 978307200) * 1000 as int) AS created_at,
+            IFNULL(cast((msg.ZDELIVERYDATE + 978307200) * 1000 as int), cast((msg.ZDATE + 978307200) * 1000 as int)) AS created_at,
             cast((msg.ZREADDATE + 978307200) * 1000 as int) AS modified_at,
             'TEXT' AS type,
             msg.ZTEXT AS body,
             0 AS isstatusmessage,
-            0 AS isqueued,
             NULL AS caption,
-            lower(hex(msg.ZQUOTEDMESSAGEID)) AS quoted_message_apiid
+            lower(hex(msg.ZQUOTEDMESSAGEID)) AS quoted_message_apiid,
+            IIF(msg.ZISOWN=0, '', cast((msg.ZDELIVERYDATE + 978307200) * 1000 as int)) AS delivered_at,
+            cast((msg.ZREADDATE + 978307200) * 1000 as int) AS read_at,
+            '' AS g_msg_states,
+            0 AS display_tags,
+            cast((msg.ZLASTEDITEDAT + 978307200) * 1000 as int) AS edited_at,
+            cast((msg.ZDELETEDAT + 978307200) * 1000 as int) AS deleted_at
         FROM ZCONVERSATION conv
         LEFT JOIN ZCONTACT contact ON (contact.Z_PK = conv.ZCONTACT)
         LEFT JOIN ZMESSAGE msg ON (msg.ZCONVERSATION = conv.Z_PK)
@@ -135,6 +142,7 @@ for contact in get_all_contact_ids(threema_db_conn):
             row[columns.index('body')] = 'ZZZ_'+ row[columns.index('apiid')] + '_ZZZ'
             #continue
 
+        #row[columns.index('uid')] = uuid.uuid4()
         writer.writerow(row)
 
 
@@ -142,13 +150,14 @@ for contact in get_all_contact_ids(threema_db_conn):
 # Export Group Chat
 #
 for group in get_all_group_ids(threema_db_conn):
-    columns = ['apiid', 'uid', "identity", 'isoutbox', 'isread', 'issaved', 'messagestae', 'posted_at', 'created_at', 'modified_at',
-               'type', 'body', 'isstatusmessage', 'isqueued', 'caption', 'quoted_message_apiid']
+    columns = ['apiid', 'uid', 'identity', 'isoutbox', 'isread', 'issaved', 'messagestae', 'posted_at', 'created_at', 'modified_at',
+               'type', 'body', 'isstatusmessage', 'caption', 'quoted_message_apiid',
+               'delivered_at', 'read_at', 'g_msg_states', 'display_tags', 'edited_at', 'deleted_at']
 
     print('Exporting group chat for: ', group)
 
     group_creator = get_group_creator(threema_db_conn, group, threema_id)
-    file_name = 'group_message_' + group + '_' + group_creator + '.csv'
+    file_name = 'group_message_' + group + '.csv'
 
     f = open(output_dir + '/' + file_name, 'w+', encoding='utf-8')
     writer = csv.writer(f, 'unix')
@@ -164,14 +173,20 @@ for group in get_all_group_ids(threema_db_conn):
             1 AS issaved,
             '' AS messagestae,
             cast((msg.ZDATE + 978307200) * 1000 as int) AS posted_at,
-            cast((msg.ZDELIVERYDATE + 978307200) * 1000 as int) AS created_at,
+            IFNULL(cast((msg.ZDELIVERYDATE + 978307200) * 1000 as int), cast((msg.ZDATE + 978307200) * 1000 as int)) AS created_at,
             cast((msg.ZREADDATE + 978307200) * 1000 as int) AS modified_at,
             'TEXT' AS type,
             msg.ZTEXT AS body,
             0 AS isstatusmessage,
-            0 AS isqueued,
             '' AS caption,
-            lower(hex(msg.ZQUOTEDMESSAGEID)) AS quoted_message_apiid
+            lower(hex(msg.ZQUOTEDMESSAGEID)) AS quoted_message_apiid,
+
+            IIF(msg.ZISOWN=0, '', cast((msg.ZDELIVERYDATE + 978307200) * 1000 as int)) AS delivered_at,
+            cast((msg.ZREADDATE + 978307200) * 1000 as int) AS read_at,
+            '' AS g_msg_states,
+            0 AS display_tags,
+            cast((msg.ZLASTEDITEDAT + 978307200) * 1000 as int) AS edited_at,
+            cast((msg.ZDELETEDAT + 978307200) * 1000 as int) AS deleted_at
         FROM ZCONVERSATION conv
         LEFT JOIN ZCONTACT cont ON (cont.Z_PK = conv.ZCONTACT)
         LEFT JOIN ZMESSAGE msg ON (msg.ZCONVERSATION = conv.Z_PK)
